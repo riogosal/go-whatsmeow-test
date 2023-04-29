@@ -3,16 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"go-meow-test/api"
 	"go-meow-test/chatgpt"
-	"go-meow-test/domain"
 	"go-meow-test/whatsapp"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
 
@@ -67,34 +67,17 @@ func main() {
 	godotenv.Load(".env")
 	wa_client, _ := bootstrap()
 
-	r := gin.Default()
-	r.POST("/new/message", func(c *gin.Context) {
-		var req domain.Message
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-		wa_client.SendMessage(context.Background(), req.To, req.Body)
-		c.JSON(200, gin.H{"status": "ok"})
-	})
-
-	r.POST("/new/group/message", func(c *gin.Context) {
-		var req domain.Message
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-		wa_client.SendGroupMessage(context.Background(), req.To, req.Body)
-		c.JSON(200, gin.H{"status": "ok"})
-	})
+	handler := api.NewHandler(10 * time.Second)
+	handler.HandleMessage(wa_client)
+	handler.HandleGroupMessage(wa_client)
 
 	srv := &http.Server{
-		Addr:    ":8000",
-		Handler: r,
+		Addr:    fmt.Sprintf(":%v", os.Getenv("SERVER_PORT")),
+		Handler: handler.Router,
 	}
 
 	go func() {
-		if err := r.Run(":8000"); err != nil {
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 			panic(err)
 		}
 	}()

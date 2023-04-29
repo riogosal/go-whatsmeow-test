@@ -21,7 +21,7 @@ type WhatsmeowClient struct {
 
 func NewWhatsMeowClient() (WhatsAppClient, error) {
 	logger := waLog.Stdout("Database", "DEBUG", true)
-	sql, err := sqlstore.New("sqlite3", "file:whatsmeow.db?_foreign_keys=on", logger)
+	sql, err := sqlstore.New("sqlite3", fmt.Sprintf("file:%s.db?_foreign_keys=on", os.Getenv("WHATSAPP_DB_NAME")), logger)
 	if err != nil {
 		return nil, err
 	}
