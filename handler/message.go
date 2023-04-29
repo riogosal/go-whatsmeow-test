@@ -1,4 +1,4 @@
-package api
+package handler
 
 type Message struct {
 	To   string `json:"to"`
