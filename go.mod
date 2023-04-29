@@ -9,6 +9,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.16
 	github.com/mdp/qrterminal v1.0.1
 	go.mau.fi/whatsmeow v0.0.0-20230427180258-7f679583b39b
+	golang.org/x/sync v0.1.0
 )
 
 require (

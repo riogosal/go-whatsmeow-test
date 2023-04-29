@@ -5,66 +5,60 @@ import (
 	"go-meow-test/chatgpt"
 	"go-meow-test/handler"
 	"go-meow-test/whatsapp"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"golang.org/x/sync/errgroup"
 )
 
-func bootstrap(wa_chan chan<- whatsapp.WhatsAppClient, gpt_chan chan<- chatgpt.ChatGPTClient, gin_chan chan<- *gin.Engine, error_chan chan<- error) {
-	go func() {
+func bootstrap() (whatsapp.WhatsAppClient, chatgpt.ChatGPTClient, *gin.Engine) {
+	wa_chan := make(chan whatsapp.WhatsAppClient, 1)
+	gpt_chan := make(chan chatgpt.ChatGPTClient, 1)
+	gin_chan := make(chan *gin.Engine, 1)
+
+	errgrp := errgroup.Group{}
+	errgrp.Go(func() error {
 		client, err := whatsapp.NewWhatsMeowClient()
 		if err != nil {
-			error_chan <- err
-			return
+			return err
 		}
-		if err := client.Connect(); err != nil {
-			error_chan <- err
-			return
-		}
-		client.SendPresence(whatsapp.PresenceUnavailable)
 		wa_chan <- client
-	}()
-	go func() {
+		return nil
+	})
+	errgrp.Go(func() error {
 		client := chatgpt.NewOfficialChatGPTClient(10 * time.Second)
-		client.WithSystemPrompt("You are a helpful seafood/marine industry expert. Answer in Bahasa Indonesia")
 		gpt_chan <- client
-	}()
-
-	go func() {
+		return nil
+	})
+	errgrp.Go(func() error {
+		if os.Getenv("APP_ENV") == "production" {
+			gin.SetMode(gin.ReleaseMode)
+		}
 		r := gin.Default()
 		gin_chan <- r
-	}()
+		return nil
+	})
+
+	if err := errgrp.Wait(); err != nil {
+		panic(err)
+	}
+
+	return <-wa_chan, <-gpt_chan, <-gin_chan
 }
 
 func main() {
 	godotenv.Load(".env")
 
-	wa_chan := make(chan whatsapp.WhatsAppClient, 1)
-	gpt_chan := make(chan chatgpt.ChatGPTClient, 1)
-	gin_chan := make(chan *gin.Engine, 1)
-	error_chan := make(chan error, 1)
+	wa_client, gpt_client, r := bootstrap()
+	gpt_client.WithSystemPrompt("You are a helpful seafood/marine industry expert. Answer in Bahasa Indonesia")
 
-	bootstrap(wa_chan, gpt_chan, gin_chan, error_chan)
-
-	var wa_client whatsapp.WhatsAppClient
-	var gpt_client chatgpt.ChatGPTClient
-	var r *gin.Engine
-	for i := 0; i < 3; i++ {
-		select {
-		case err := <-error_chan:
-			panic(err)
-		case client := <-wa_chan:
-			wa_client = client
-		case client := <-gpt_chan:
-			gpt_client = client
-		case gin := <-gin_chan:
-			r = gin
-		}
+	wa_client.SetEventsHandler(gpt_client)
+	if err := wa_client.Connect(); err != nil {
+		panic(err)
 	}
 	defer wa_client.Disconnect()
-
-	fmt.Printf("Bootstrap complete, gin %v, gpt %v, wa %v\n", r, gpt_client, wa_client)
 
 	handler.NewTextMessageHandler(r, wa_client, 10*time.Second)
 

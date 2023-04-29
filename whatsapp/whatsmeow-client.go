@@ -2,8 +2,12 @@ package whatsapp
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"go-meow-test/chatgpt"
 	"os"
+	"regexp"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
@@ -33,15 +37,40 @@ func NewWhatsMeowClient() (WhatsAppClient, error) {
 		container,
 		logger,
 	)
-	client.AddEventHandler(func(evt interface{}) {
-		switch v := evt.(type) {
-		case *events.Message:
-			fmt.Println("Message event:", v)
-		}
-	})
 	return &WhatsmeowClient{
 		client,
 	}, nil
+}
+
+var bot_prompt = regexp.MustCompile(`^\!bot`)
+
+func (w *WhatsmeowClient) SetEventsHandler(chatgpt chatgpt.ChatGPTClient) {
+	w.client.AddEventHandler(func(evt interface{}) {
+		switch v := evt.(type) {
+		case *events.Message:
+			if v.Info.IsFromMe {
+				return
+			}
+			if v.Message.Conversation == nil {
+				return
+			}
+			if !bot_prompt.Match([]byte(*v.Message.Conversation)) {
+				return
+			}
+			if target := os.Getenv("WHATSAPP_TARGET_JID"); v.Info.Sender.String() == target {
+				w.client.SendChatPresence(v.Info.Sender, types.ChatPresenceComposing, types.ChatPresenceMediaText)
+				// only run chatgpt if the message is from the target
+				if result, err := chatgpt.ChatCompletion(*v.Message.Conversation); err != nil {
+					w.SendMessage(context.Background(), target, "Bot chat is unavailable right now. Sorry!")
+				} else {
+					w.SendMessage(context.Background(), target, result)
+				}
+				w.client.SendChatPresence(v.Info.Sender, types.ChatPresencePaused, types.ChatPresenceMediaText)
+				w.SendPresence(PresenceUnavailable)
+
+			}
+		}
+	})
 }
 
 func (w *WhatsmeowClient) Disconnect() {
@@ -74,22 +103,13 @@ func (w *WhatsmeowClient) Connect() error {
 }
 
 func (w *WhatsmeowClient) SendMessage(ctx context.Context, to, message string) error {
-	targetJID := types.JID{
-		User:   to,
-		Server: "s.whatsapp.net",
+	split_str := strings.Split(to, "@")
+	if len(split_str) != 2 {
+		return errors.New("invalid jid")
 	}
-
-	_, err := w.client.SendMessage(ctx, targetJID, &proto.Message{
-		Conversation: &message,
-	})
-
-	return err
-}
-
-func (w *WhatsmeowClient) SendGroupMessage(ctx context.Context, group, message string) error {
 	targetJID := types.JID{
-		User:   group,
-		Server: "g.us",
+		User:   split_str[0],
+		Server: split_str[1],
 	}
 
 	_, err := w.client.SendMessage(ctx, targetJID, &proto.Message{
@@ -106,10 +126,6 @@ func (w *WhatsmeowClient) SendPresence(presence Presence) error {
 		p = types.PresenceAvailable
 	case PresenceUnavailable:
 		p = types.PresenceUnavailable
-	case PresenceComposing:
-		p = types.Presence(types.ChatPresenceComposing)
-	case PresencePaused:
-		p = types.Presence(types.ChatPresencePaused)
 	}
 
 	return w.client.SendPresence(p)

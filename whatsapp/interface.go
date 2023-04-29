@@ -1,6 +1,9 @@
 package whatsapp
 
-import "context"
+import (
+	"context"
+	"go-meow-test/chatgpt"
+)
 
 type Presence string
 
@@ -16,8 +19,10 @@ type WhatsAppClient interface {
 	Disconnect()
 
 	SendMessage(ctx context.Context, to, message string) error
-	SendGroupMessage(ctx context.Context, group, message string) error
+	// SendGroupMessage(ctx context.Context, group, message string) error
 	SendPresence(presence Presence) error
+
+	SetEventsHandler(chatgpt chatgpt.ChatGPTClient)
 
 	// HandleMessage(handler func())
 }

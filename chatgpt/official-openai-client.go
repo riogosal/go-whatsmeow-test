@@ -16,7 +16,7 @@ type OfficialChatGPT struct {
 	http          http.Client
 }
 
-func NewOfficialChatGPTClient(timeout time.Duration) *OfficialChatGPT {
+func NewOfficialChatGPTClient(timeout time.Duration) ChatGPTClient {
 	return &OfficialChatGPT{
 		token: os.Getenv("CHATGPT_TOKEN"),
 		http:  http.Client{Timeout: timeout},
@@ -78,6 +78,8 @@ func (c *OfficialChatGPT) ChatCompletion(prompt string) (string, error) {
 	if len(data.Choices) == 0 {
 		return "", fmt.Errorf("no choices")
 	}
+
+	fmt.Printf("RESPONSE FROM CHATGPT %v\n\n\n", data.Choices[0].Message)
 
 	return data.Choices[0].Message.Content, nil
 }
