@@ -62,5 +62,5 @@ func main() {
 
 	handler.NewTextMessageHandler(r, wa_client, 10*time.Second)
 
-	r.Run(fmt.Sprintf(":%s", "8080"))
+	r.Run(fmt.Sprintf(":%s", os.Getenv("SERVER_PORT")))
 }
